@@ -12,7 +12,7 @@
 <p align="center">
   一款功能完善、可视化定制的 <strong>WordPress 外链安全跳转插件</strong>。<br>
   自动拦截文章/评论/圈子中的外链，强制经过可控的提示页跳转；<br>
-  内置 <strong>8 套精美提示页样式</strong>、<strong>两种加密验证机制</strong>、<strong>子比 / 7b2 主题深度适配</strong>、<strong>GitHub Releases 一键更新</strong>。
+  内置 <strong>8 套精美提示页样式</strong>、<strong>两种加密验证机制</strong>、<strong>子比 / 7b2 主题深度适配</strong>
 </p>
 
 ---
