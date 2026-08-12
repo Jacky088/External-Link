@@ -1,8 +1,5 @@
 # External Link — WordPress 外链跳转插件
 
-<p align="center">
-  <img src="assets/img/external-link-default.png" alt="External Link Preview" width="640" />
-</p>
 
 <p align="center">
   <a href="https://github.com/Jacky088/External-Link/stargazers"><img src="https://img.shields.io/github/stars/Jacky088/External-Link?style=flat-square" alt="Stars"></a>
@@ -22,7 +19,6 @@
 
 ## 目录
 
-- [预览](#预览)
 - [核心特性](#核心特性)
 - [环境要求](#环境要求)
 - [安装](#安装)
@@ -34,24 +30,10 @@
 - [GitHub Releases 自动更新](#github-releases-自动更新)
 - [目录结构](#目录结构)
 - [常见问题](#常见问题)
-- [贡献](#贡献)
-- [作者与许可](#作者与许可)
+- [许可](#许可)
 
 ---
 
-## 预览
-
-插件后台可视化选择提示页样式：
-
-<p align="center">
-  <img src="assets/img/external-link-default.png" width="200" alt="默认样式-茉莉小栈" />
-  <img src="assets/img/external-link-bilibili.png" width="200" alt="哔哩哔哩" />
-  <img src="assets/img/external-link-csdn.png" width="200" alt="CSDN" />
-  <img src="assets/img/external-link-tiktok.png" width="200" alt="TikTok" />
-  <img src="assets/img/external-link-moxing.jpg" width="200" alt="墨星博客" />
-</p>
-
----
 
 ## 核心特性
 
@@ -281,21 +263,10 @@ A: 加密过的 URL 将无法还原。插件会在 AES 失效时自动回退到�
 
 ---
 
-## 贡献
 
-欢迎通过 Issue 反馈问题、Pull Request 提交改进：
+## 许可
 
-1. Fork 本仓库
-3. 从 `master` 创建特性分支 (`git checkout -b feature/amazing`)
-4. 提交改动 (`git commit -m 'feat: add amazing feature'`)
-5. 推送分支 (`git push origin feature/amazing`)
-6. 提交 Pull Request
-
----
-
-## 作者与许可
-
-- **作者**：木木
+- **修改自**：<https://github.com/dmmyblog/dmy-link>
 - **主页**：<https://github.com/Jacky088/External-Link>
 - **许可协议**：基于 **GPLv3** 开源，并采用 **CC BY-NC-SA 4.0** 协议发布——**免费使用，禁止商业用途，须保留原作者信息**。
 
