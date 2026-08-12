@@ -522,11 +522,14 @@ add_action('init', 'external_link_redirect');
 // =============================================================
 // WebStack 导航主题适配
 // 导航条目 URL 存放于自定义字段 _sites_link，由模板直接 echo 输出，
-// 不经过 the_content 过滤器，因此通过 get_post_metadata 透明接管。
+// 不经过 the_content 过滤器。同时该字段还被用于拼接 favicon 接口
+// 地址（如 format_url($m_link_url) 取域名），因此不能改写 _sites_link。
+// 采用 output buffer 方案：仅替换 HTML 中指向外链的 <a href="...">，
+// 完全不影响 <img src>、favicon 拼接等其它用途。
 // =============================================================
 
 /**
- * 获取当前请求是否处于 WebStack 导航站条目的前台浏览场景
+ * 判断当前请求是否需要启用 WebStack 前台外链接管
  *
  * @return bool
  */
@@ -544,54 +547,69 @@ function external_webstack_should_rewrite() {
     if (defined('REST_REQUEST') && REST_REQUEST) {
         return false;
     }
-    // WebStack 在首页、分类、搜索、详情等所有前台页面都会输出导航条目卡片，
-    // 因此在前台所有页面统一接管 _sites_link 读取。
+    // 排除 AJAX 请求
+    if (wp_doing_ajax()) {
+        return false;
+    }
+    // 跳转页本身不处理，避免重复
+    if (get_query_var('dinterception') == 1) {
+        return false;
+    }
     return true;
 }
 
 /**
- * 接管 get_post_meta() 对 _sites_link 字段的读取，透明替换为插件跳转链接
+ * output buffer 回调：将 HTML 中指向外链的 <a href="..."> 替换为插件跳转链接
+ *
+ * @param string $buffer
+ * @return string
  */
-function external_webstack_rewrite_sites_link($value, $object_id, $meta_key, $single) {
-    if (!$single) {
-        return $value; // 仅处理取单个值的场景（模板用 true）
-    }
-    if ($meta_key !== '_sites_link') {
-        return $value;
-    }
-    if (!external_webstack_should_rewrite()) {
-        return $value;
+function external_webstack_buffer_rewrite_links($buffer) {
+    // 不处理非 HTML 内容（JSON / 空）
+    if (empty($buffer)) {
+        return $buffer;
     }
 
-    // 静态标志防止递归：读取原始值时避免再次触发本过滤器
-    static $reading_raw = false;
-    if ($reading_raw) {
-        return $value;
-    }
-    $reading_raw = true;
+    return preg_replace_callback(
+        '/<a\s+([^>]*?)href="([^"]*)"([^>]*?)>/i',
+        function ($m) {
+            $url        = $m[2];
+            $beforeHref = $m[1];
+            $afterHref  = $m[3];
 
-    // 原样读取真实 URL：优先 get_metadata_raw（WP 5.5+，不触发过滤器），否则走 get_metadata 兜底
-    if (function_exists('get_metadata_raw')) {
-        $url = get_metadata_raw('post', $object_id, '_sites_link', true);
-    } else {
-        $url = get_metadata('post', $object_id, '_sites_link', true);
-    }
-    $reading_raw = false;
+            // 跳过锚点、javascript、mailto 等非 http(s) 外链
+            if (!preg_match('/^https?:\/\//i', $url)) {
+                return $m[0];
+            }
+            // 站内链接或白名单直接放行
+            if (is_internal_link($url) || is_whitelisted_link($url, 'dmy_link_settings')) {
+                return $m[0];
+            }
 
-    if (empty($url)) {
-        return $url;
-    }
+            // 复用插件统一跳转链接生成逻辑（含过期/加密设置）
+            $redirect = external_get_redirect_url($url);
 
-    // 内部链接或白名单直接放行
-    if (is_internal_link($url) || is_whitelisted_link($url, 'dmy_link_settings')) {
-        return $url;
-    }
+            // 补充 target="_blank"
+            if (!preg_match('/target\s*=\s*[\'"][^"\']*_blank[^"\']*[\'"]/i', $afterHref)) {
+                $afterHref .= ' target="_blank"';
+            }
 
-    // 复用插件统一跳转链接生成逻辑（含过期/加密设置）
-    return external_get_redirect_url($url);
+            return '<a ' . $beforeHref . 'href="' . $redirect . '"' . $afterHref . '>';
+        },
+        $buffer
+    );
 }
-// 挂载到 get_post_metadata 过滤器
-add_filter('get_post_metadata', 'external_webstack_rewrite_sites_link', 20, 4);
+
+/**
+ * 在 WebStack 主题前台启动 output buffer，渲染完成后改写外链
+ */
+function external_webstack_start_buffer() {
+    if (!external_webstack_should_rewrite()) {
+        return;
+    }
+    ob_start('external_webstack_buffer_rewrite_links');
+}
+add_action('template_redirect', 'external_webstack_start_buffer', 20);
 
 // 添加重定向规则
 function external_link_rewrite_rules() {
