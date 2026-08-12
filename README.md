@@ -27,7 +27,6 @@
 - [提示页样式](#提示页样式)
 - [安全机制](#安全机制)
 - [主题适配](#主题适配)
-- [GitHub Releases 自动更新](#github-releases-自动更新)
 - [目录结构](#目录结构)
 - [常见问题](#常见问题)
 - [许可](#许可)
@@ -48,8 +47,7 @@
 - **Logo 自定义**：支持上传自定义 Logo，未设置时优雅回退。
 - **主题深度适配**：子比(zibll)主题自动关闭其原生外链重定向并接管相关过滤器；7b2 主题圈子支持自定义 CSS 选择器。
 - **AJAX 动态转链**：基于 `MutationObserver` + `requestIdleCallback` 扫描选择器内新增的链接，配合公开 AJAX 接口(Nginx 缓存友好)完成转换。
-- **GitHub Releases 一键更新**：通过 WordPress 原生 update 机制，30 分钟缓存 + 限流降级。
-- **优雅卸载**：自动清理 options、transient、Rewrite、GitHub 缓存，无残留。
+- **优雅卸载**：自动清理 options、transient、Rewrite，无残留。
 
 ---
 
@@ -191,26 +189,6 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 
 ---
 
-## GitHub Releases 自动更新
-
-- 仓库地址：`https://github.com/Jacky088/External-Link`
-- 缓存策略：`site_transient('external_link_latest_release')`，**30 分钟**有效期
-- 限流处理：遇 GitHub API 429/403 自动降级为 15 分钟短缓存
-- 跳过规则：`draft` / `prerelease` 不推送
-- 版本解析：自动去掉 tag 前的 `v` 前缀，校验 semver
-- 包下载：优先匹配 Release 中的 `.zip` 附件，回退 `zipball_url`
-- 详情弹窗：`plugins_api` 注入完整 changelog(Release Body 经 `nl2br(esc_html())`)
-
-发布新版本只需：
-
-```bash
-git tag v1.1.0
-git push origin v1.1.0
-# 在 GitHub Releases 中创建 Release，上传 .zip 附件
-```
-
----
-
 ## 目录结构
 
 ```
@@ -243,9 +221,6 @@ external-link/
 │   ├── jump-style.php
 │   ├── moxing-style.php
 │   └── tiktok-style.php
-├── src/
-│   └── Update/
-│       └── GitHubReleaseUpdater.php
 └── codestar-framework/        # 第三方配置面板框架(vendor)
     └── admin-settings/
         └── external-link-settings.php

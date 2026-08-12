@@ -53,10 +53,6 @@ define('EXTERNAL_LINK_PLUGIN_DIR', plugin_dir_path(__FILE__));
 define('EXTERNAL_LINK_PLUGIN_URL', plugin_dir_url(__FILE__));
 define('EXTERNAL_LINK_URL', EXTERNAL_LINK_PLUGIN_URL);
 
-// 加载 GitHub Releases 自动更新
-require_once EXTERNAL_LINK_PLUGIN_DIR . 'src/Update/GitHubReleaseUpdater.php';
-ExternalLink_GitHubReleaseUpdater::init(__FILE__, external_link_plugin_version());
-
 // 判断当前主题是否是zibll主题或其子主题
 function is_zibll_themes()
 {
@@ -752,9 +748,7 @@ function dmy_link_uninstall() {
     $transients = $wpdb->get_col(
         "SELECT option_name FROM $wpdb->options
         WHERE option_name LIKE '_transient_dmy_link_%'
-        OR option_name LIKE '_transient_timeout_dmy_link_%'
-        OR option_name LIKE '_site_transient_external_link_latest_release'
-        OR option_name LIKE '_site_transient_timeout_external_link_latest_release'"
+        OR option_name LIKE '_transient_timeout_dmy_link_%'"
     );
 
     foreach ($transients as $transient) {
@@ -762,9 +756,6 @@ function dmy_link_uninstall() {
         delete_transient($name);
         delete_site_transient($name);
     }
-
-    // 清理 GitHub 自动更新缓存（站点级瞬态）
-    delete_site_transient('external_link_latest_release');
 
     // 移除跳转页重写规则
     flush_rewrite_rules();
