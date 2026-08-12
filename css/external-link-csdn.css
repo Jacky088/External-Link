@@ -89,7 +89,7 @@
 }
 
 .external-link-csdn-logo {
-  width: 240px;
+  width: 180px;
   max-width: 100%;
   margin: 0 auto 16px;
 }
@@ -98,4 +98,10 @@
   width: 100%;
   height: auto;
   max-width: 100%;
+}
+
+@media (max-width: 450px) {
+  .external-link-csdn-logo {
+    width: 140px;
+  }
 }

@@ -21,7 +21,7 @@
   }
 
   .external-link-moxing-logo {
-    width: 240px;
+    width: 180px;
     max-width: 100%;
     margin: 0 auto 20px;
   }
@@ -30,6 +30,12 @@
     width: 100%;
     height: auto;
     max-width: 100%;
+  }
+
+  @media (max-width: 450px) {
+    .external-link-moxing-logo {
+      width: 140px;
+    }
   }
 
   .external-link-moxing-title {
