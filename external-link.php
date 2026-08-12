@@ -227,6 +227,39 @@ function external_link_enqueue_styles() {
 }
 add_action('wp_enqueue_scripts', 'external_link_enqueue_styles');
 
+// 加载实时换链脚本（方案A）：前端点击外链时实时换取跳转 URL
+// 避免 CDN / 页面缓存导致跳转 Token 过期失效
+function external_link_enqueue_live_script() {
+    $settings = get_option('dmy_link_settings');
+    if (empty($settings['dmy_link_enable'])) {
+        return; // 总开关关闭时不加载
+    }
+
+    // 跳转页本身无需加载
+    if (get_query_var('dinterception') == 1) {
+        return;
+    }
+
+    $js_file_path = plugin_dir_path(__FILE__) . 'js/external-link-live.js';
+    if (!file_exists($js_file_path)) {
+        return;
+    }
+
+    wp_enqueue_script(
+        'external-link-live',
+        plugin_dir_url(__FILE__) . 'js/external-link-live.js',
+        array(),
+        filemtime($js_file_path),
+        true
+    );
+
+    wp_localize_script('external-link-live', 'external_link_live_config', array(
+        'ajax_url' => admin_url('admin-ajax.php'),
+        'domain'   => isset($_SERVER['HTTP_HOST']) ? sanitize_text_field(wp_unslash($_SERVER['HTTP_HOST'])) : parse_url(home_url(), PHP_URL_HOST),
+    ));
+}
+add_action('wp_enqueue_scripts', 'external_link_enqueue_live_script', 15);
+
 // 统一URL加密函数
 function external_link_encrypt_url($url) {
     $settings = get_option('dmy_link_settings');
@@ -305,33 +338,11 @@ function external_link_intercept_links($content) {
 
             // 检查是否是内部链接或白名单链接
             if (!is_internal_link($url) && !is_whitelisted_link($url, 'dmy_link_settings')) {
-                $encrypted_key = external_link_encrypt_url($url);
-                
-                // 根据加密方式设置过期时间
-                $method = isset($settings['dmy_link_verification_method']) ? $settings['dmy_link_verification_method'] : 'random_string';
-                
-                if ($method === 'random_string') {
-                    $expiration = isset($settings['dmy_link_expiration']) ? intval($settings['dmy_link_expiration']) : 5;
-                    $expiration_time = $expiration * 60;
-                    set_transient('dmy_link_' . $encrypted_key, $url, $expiration_time);
-                } else {
-                    // AES方式设较长但有限的过期时间（避免 options 表无限膨胀）
-                    set_transient('dmy_link_' . $encrypted_key, $url, 30 * DAY_IN_SECONDS);
+                // 已标记过则跳过，避免重复叠加属性
+                if (stripos($beforeHref . $afterHref, 'data-external-link') === false) {
+                    $beforeHref .= ' data-external-link="1"';
                 }
-                
-                $newHref = external_link_build_redirect_url($encrypted_key);
-                
-                // 检查是否已有 target="_blank"
-                if (!preg_match('/target\s*=\s*[\'"][^"\']*_blank[^"\']*[\'"]/i', $afterHref)) {
-                    $afterHref .= ' target="_blank"';
-                }
-                
-                return '<a ' . $beforeHref . 'href="' . $newHref . '"' . $afterHref . '>';
-            }
-            
-            // 检查原始链接是否已有 target="_blank"
-            if (!preg_match('/target\s*=\s*[\'"][^"\']*_blank[^"\']*[\'"]/i', $afterHref)) {
-                $afterHref .= ' target="_blank"';
+                return '<a ' . $beforeHref . 'href="' . $url . '"' . $afterHref . '>';
             }
             
             return '<a ' . $beforeHref . 'href="' . $url . '"' . $afterHref . '>';
@@ -555,7 +566,9 @@ function external_webstack_should_rewrite() {
 }
 
 /**
- * output buffer 回调：将 HTML 中指向外链的 <a href="..."> 替换为插件跳转链接
+ * output buffer 回调：为 HTML 中指向外链的 <a> 添加 data-external-link="1" 标记，
+ * 保留原始 href（利于 SEO），由前端 JS 在点击时实时换取跳转链接。
+ * 不写死跳转 URL，彻底避免 CDN / 页面缓存导致 Token 过期失效。
  *
  * @param string $buffer
  * @return string
@@ -582,15 +595,15 @@ function external_webstack_buffer_rewrite_links($buffer) {
                 return $m[0];
             }
 
-            // 复用插件统一跳转链接生成逻辑（含过期/加密设置）
-            $redirect = external_get_redirect_url($url);
-
-            // 补充 target="_blank"
-            if (!preg_match('/target\s*=\s*[\'"][^"\']*_blank[^"\']*[\'"]/i', $afterHref)) {
-                $afterHref .= ' target="_blank"';
+            // 已标记过则跳过，避免重复叠加属性
+            if (stripos($beforeHref . $afterHref, 'data-external-link') !== false) {
+                return $m[0];
             }
 
-            return '<a ' . $beforeHref . 'href="' . $redirect . '"' . $afterHref . '>';
+            // 追加标记：前端点击时实时换链
+            $beforeHref .= ' data-external-link="1"';
+
+            return '<a ' . $beforeHref . 'href="' . $url . '"' . $afterHref . '>';
         },
         $buffer
     );

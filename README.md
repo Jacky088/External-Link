@@ -37,6 +37,7 @@
 ## 核心特性
 
 - **自动拦截外链**：`the_content`、`get_comment_author_link`、`comment_text` 过滤器全方位接管，文章/评论外链统一改写为跳转 URL。
+- **前端实时换链（防 CDN 缓存过期）**：外链不再在 HTML 中写死跳转链接，而是点击时通过 AJAX 实时换取最新跳转 URL。彻底解决启用 CDN / 页面缓存后跳转 Token 过期失效的问题。
 - **白名单系统**：支持域名后缀、完整 URL 两种形式，每行一个，无需带协议头。
 - **8 套精美提示页样式**：默认(茉莉小栈)毛玻璃 / 哔哩哔哩 / 腾讯云社区 / CSDN / 知乎 / 通用跳转(紫蓝渐变) / 墨星博客 / TikTok 海外版。后台可视化预览，一键切换。
 - **两种加密验证机制**：
@@ -200,7 +201,8 @@ external-link/
 ├── assets/
 │   └── img/                   # 样式预览与提示页素材
 ├── js/
-│   └── external-link-circle.js
+│   ├── external-link-circle.js  # 圈子/社区选择器扫描
+│   └── external-link-live.js    # 前端实时换链(防缓存过期)
 ├── css/
 │   ├── external-link.css               # 基础样式
 │   ├── external-link-default.css
