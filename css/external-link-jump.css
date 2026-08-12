@@ -75,11 +75,16 @@
   text-decoration: none;
 }
 
+.external-link-jump-logo {
+  width: 240px;
+  max-width: 100%;
+  margin: 0 auto 16px;
+}
 .external-link-jump-logo img {
   display: block;
-  width: 200px;
-  margin: auto;
-  margin-bottom: 16px;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
 }
 
 .external-link-jump-title-icon {

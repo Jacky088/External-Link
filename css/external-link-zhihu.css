@@ -92,9 +92,14 @@
   background-color: #0070cd;
 }
 
+.external-link-zhihu-logo {
+  width: 240px;
+  max-width: 100%;
+  margin: 0 auto 16px;
+}
 .external-link-zhihu-logo img {
   display: block;
-  width: 200px;
-  margin-right: auto;
-  margin-bottom: 16px;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
 }

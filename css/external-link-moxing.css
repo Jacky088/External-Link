@@ -20,10 +20,16 @@
     box-shadow: 0 6px 16px rgba(0, 0, 0, 0.1);
   }
 
-  .external-link-moxing-logo img {
-    width: 200px;
+  .external-link-moxing-logo {
+    width: 240px;
+    max-width: 100%;
     margin: 0 auto 20px;
+  }
+  .external-link-moxing-logo img {
     display: block;
+    width: 100%;
+    height: auto;
+    max-width: 100%;
   }
 
   .external-link-moxing-title {

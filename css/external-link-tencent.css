@@ -91,9 +91,14 @@
   background-color: #2670e8
 }
 
+.external-link-tencent-logo {
+  width: 240px;
+  max-width: 100%;
+  margin: 0 auto 16px;
+}
 .external-link-tencent-logo img {
   display: block;
-  width: 200px;
-  margin-right: auto;
-  margin-bottom: 16px;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
 }
