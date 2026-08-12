@@ -77,6 +77,21 @@ function is_zibll_themes()
     return false;
 }
 
+// 判断当前主题是否是WebStack导航主题或其变体
+function is_webstack_themes()
+{
+    $current_theme = wp_get_theme();
+    $stylesheet    = strtolower($current_theme->get_stylesheet());
+    $template      = strtolower($current_theme->get('Template'));
+
+    // 匹配 WebStack 主主题及常见变体（webstack、webstack-pro、webstackpro 等）
+    if (preg_match('/webstack/i', $stylesheet) || preg_match('/webstack/i', $template)) {
+        return true;
+    }
+
+    return false;
+}
+
 // 初始化所有功能
 function external_link_init_functions() {
     // 全局配置变量
@@ -503,6 +518,80 @@ function external_link_redirect() {
 }
 add_action('init', 'external_link_redirect');
 
+
+// =============================================================
+// WebStack 导航主题适配
+// 导航条目 URL 存放于自定义字段 _sites_link，由模板直接 echo 输出，
+// 不经过 the_content 过滤器，因此通过 get_post_metadata 透明接管。
+// =============================================================
+
+/**
+ * 获取当前请求是否处于 WebStack 导航站条目的前台浏览场景
+ *
+ * @return bool
+ */
+function external_webstack_should_rewrite() {
+    // 总开关未启用则不做任何接管
+    $settings = get_option('dmy_link_settings');
+    if (empty($settings['dmy_link_enable'])) {
+        return false;
+    }
+    // 仅 WebStack 主题且仅前台浏览时接管，避免影响后台编辑/其它上下文
+    if (!is_webstack_themes() || is_admin()) {
+        return false;
+    }
+    // 排除 REST API / 后台异步请求，避免破坏编辑与接口场景
+    if (defined('REST_REQUEST') && REST_REQUEST) {
+        return false;
+    }
+    // WebStack 在首页、分类、搜索、详情等所有前台页面都会输出导航条目卡片，
+    // 因此在前台所有页面统一接管 _sites_link 读取。
+    return true;
+}
+
+/**
+ * 接管 get_post_meta() 对 _sites_link 字段的读取，透明替换为插件跳转链接
+ */
+function external_webstack_rewrite_sites_link($value, $object_id, $meta_key, $single) {
+    if (!$single) {
+        return $value; // 仅处理取单个值的场景（模板用 true）
+    }
+    if ($meta_key !== '_sites_link') {
+        return $value;
+    }
+    if (!external_webstack_should_rewrite()) {
+        return $value;
+    }
+
+    // 静态标志防止递归：读取原始值时避免再次触发本过滤器
+    static $reading_raw = false;
+    if ($reading_raw) {
+        return $value;
+    }
+    $reading_raw = true;
+
+    // 原样读取真实 URL：优先 get_metadata_raw（WP 5.5+，不触发过滤器），否则走 get_metadata 兜底
+    if (function_exists('get_metadata_raw')) {
+        $url = get_metadata_raw('post', $object_id, '_sites_link', true);
+    } else {
+        $url = get_metadata('post', $object_id, '_sites_link', true);
+    }
+    $reading_raw = false;
+
+    if (empty($url)) {
+        return $url;
+    }
+
+    // 内部链接或白名单直接放行
+    if (is_internal_link($url) || is_whitelisted_link($url, 'dmy_link_settings')) {
+        return $url;
+    }
+
+    // 复用插件统一跳转链接生成逻辑（含过期/加密设置）
+    return external_get_redirect_url($url);
+}
+// 挂载到 get_post_metadata 过滤器
+add_filter('get_post_metadata', 'external_webstack_rewrite_sites_link', 20, 4);
 
 // 添加重定向规则
 function external_link_rewrite_rules() {

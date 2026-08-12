@@ -176,6 +176,13 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 - ✅ 基于 `MutationObserver` + `requestIdleCallback` 异步处理，不阻塞首屏渲染
 - ✅ 防重复处理：已处理链接标记 `dataset.externalLinkDone='1'`
 
+### WebStack 导航主题
+
+- ✅ 自动检测 WebStack 及其变体(webstack / webstack-pro / webstackpro 等)
+- ✅ 导航条目的目标 URL 存放于自定义字段 `_sites_link`，由模板直接输出、不走 `the_content` 过滤器——插件通过 `get_post_metadata` 过滤器透明接管该字段
+- ✅ 前台所有页面(首页、分类、搜索、详情)统一改写，后台编辑与 REST 接口不受影响
+- ✅ 站内链接与白名单链接仍直接放行，无需额外配置
+
 ### 其他主题
 
 任意主题下都可使用基础外链拦截与跳转功能。CSF 加载失败时会显示备用菜单与错误提示。
