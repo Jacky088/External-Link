@@ -267,7 +267,6 @@ A: 加密过的 URL 将无法还原。插件会在 AES 失效时自动回退到�
 ## 许可
 
 - **修改自**：<https://github.com/dmmyblog/dmy-link>
-- **主页**：<https://github.com/Jacky088/External-Link>
 - **许可协议**：基于 **GPLv3** 开源，并采用 **CC BY-NC-SA 4.0** 协议发布——**免费使用，禁止商业用途，须保留原作者信息**。
 
 > 如果这个项目对你有帮助，欢迎 ⭐ Star 与 Fork，你的支持是持续维护的动力。
