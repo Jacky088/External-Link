@@ -10,10 +10,10 @@
             <div class="external-link-zhihu-title-div">
                 <div class="external-link-zhihu-title-icon">
                     <div class="external-link-zhihu-title-text">即将离开
-                        <?php echo get_bloginfo('name'); ?>
+                        <?php echo esc_html(get_bloginfo('name')); ?>
                     </div>
                     <p>您即将离开
-                        <?php echo get_bloginfo('name'); ?>，请注意您的帐号和财产安全。
+                        <?php echo esc_html(get_bloginfo('name')); ?>，请注意您的帐号和财产安全。
                     </p>
                     <p class="external-link-zhihu-titlelink-p-no2">
                         <?php echo esc_url($link); ?>

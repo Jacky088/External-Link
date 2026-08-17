@@ -29,7 +29,7 @@
 
       </div>
       <div class="external-link-jump-cancel-btn">
-        <a href="<?php echo home_url(); ?>">
+        <a href="<?php echo esc_url(home_url('/')); ?>">
           返回首页
         </a>
         <a href="<?php echo esc_url($link); ?>">

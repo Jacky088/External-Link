@@ -37,12 +37,12 @@
 ## 核心特性
 
 - **自动拦截外链**：`the_content`、`get_comment_author_link`、`comment_text` 过滤器全方位接管，文章/评论外链统一改写为跳转 URL。
-- **前端实时换链（防 CDN 缓存过期）**：外链不再在 HTML 中写死跳转链接，而是点击时通过 AJAX 实时换取最新跳转 URL。彻底解决启用 CDN / 页面缓存后跳转 Token 过期失效的问题。
-- **白名单系统**：支持域名后缀、完整 URL 两种形式，每行一个，无需带协议头。
+- **前端实时换链（防 CDN 缓存过期）**：点击外链时通过 AJAX 实时换取最新跳转 URL，并在新窗口打开拦截提示页，原内容页保持不动。彻底解决启用 CDN / 页面缓存后跳转 Token 过期失效的问题。
+- **白名单系统**：兼容域名后缀、完整 URL 两种形式，每行一个；纯域名会匹配其子域名，完整 URL 按路径边界匹配。
 - **8 套精美提示页样式**：默认(茉莉小栈)毛玻璃 / 哔哩哔哩 / 腾讯云社区 / CSDN / 知乎 / 通用跳转(紫蓝渐变) / 墨星博客 / TikTok 海外版。后台可视化预览，一键切换。
 - **两种加密验证机制**：
   - 随机字符串 Token + 过期机制（默认 5 分钟，可自定义 1–1440 分钟）
-  - AES-256-CBC 自包含加密 URL（永久有效、无需数据库）
+  - AES-256-GCM 自包含加密 URL（永久有效、无需数据库），兼容旧 CBC 链接
 - **Referer 防护**：开启后禁止站外直接访问跳转页（403），支持空 Referer 放行与白名单。
 - **可自定义跳转页 Slug**：默认 `dinterception`，后台修改即自动刷新 Rewrite。
 - **Logo 自定义**：支持上传自定义 Logo，未设置时优雅回退。
@@ -105,7 +105,7 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 | --- | --- | --- | --- | --- |
 | **基本设置** | 启用插件功能 | switcher | ✅ | 关闭后所有拦截与样式停用 |
 | | 跳转页路径(Slug) | text | `dinterception` | 仅允许小写字母/数字/短横线，保存即自动 flush rewrite |
-| **白名单设置** | 白名单链接 | textarea | — | 每行一个，支持域名后缀与完整 URL |
+| **白名单设置** | 白名单链接 | textarea | — | 每行一个，纯域名兼容子域名，完整 URL 按路径边界匹配 |
 | **样式设置** | 提示页面样式 | image_select | `external-link-default` | 8 套可视化选择 |
 | **主题社区功能** | 选择社区功能类型 | radio | `none` | `none` / `circle`(7b2) / `forums`(子比) |
 | | 圈子内容选择器 | text | `.topic-content` | 仅 circle 类型显示 |
@@ -146,7 +146,7 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 - 有效期：默认 **5 分钟**，可后台自定义 1–1440 分钟
 - 过期后访问触发 404 提示页 + 返回首页按钮
 
-### AES-256-CBC 自包含加密
+### AES-256-GCM 自包含加密
 
 - 形态：URL 自带 `IV(16B) + 密文`，整体 base64
 - 存储：理论上**无需**数据库；为防 options 表膨胀仍写入 30 天 transient 兜底

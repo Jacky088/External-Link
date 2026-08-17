@@ -1,99 +1,123 @@
-/**
- * External Link - 实时换链脚本（方案A）
- *
- * 不再在 HTML 中写死跳转链接，而是点击外链时通过 AJAX 实时换取最新跳转 URL。
- * 彻底解决 CDN / 页面缓存导致跳转 Token 过期失效的问题。
- */
 (function () {
   'use strict';
 
   if (typeof window.external_link_live_config === 'undefined') return;
   var config = window.external_link_live_config;
-  var API = config.ajax_url;
-  var DOMAIN = config.domain;
+  var pending = new Map();
 
-  /** 判断是否为站外 http(s) 链接 */
   function isExternal(href) {
-    if (!href || (href.indexOf('http://') !== 0 && href.indexOf('https://') !== 0)) return false;
+    if (!href) return false;
     try {
-      return new URL(href).host !== DOMAIN;
-    } catch (e) {
+      var url = new URL(href, window.location.href);
+      var sameHost = url.hostname === config.domain && (!config.port || String(url.port || (url.protocol === 'https:' ? 443 : 80)) === String(config.port));
+      return (url.protocol === 'http:' || url.protocol === 'https:') && !sameHost;
+    } catch (error) {
       return false;
     }
   }
 
-  /**
-   * 实时换取跳转链接并跳转
-   * @param {HTMLAnchorElement} a
-   */
-  function convertAndGo(a) {
-    var href = a.getAttribute('href');
-    // 已经是跳转链接或站内链接，直接放行
-    if (!isExternal(href)) {
-      window.location.href = href;
+  function markScopedLinks(root) {
+    if (!config.selector || !root.querySelectorAll) return;
+    var containers = [];
+    try {
+      if (root.matches && root.matches(config.selector)) containers.push(root);
+      root.querySelectorAll(config.selector).forEach(function (container) { containers.push(container); });
+    } catch (error) {
       return;
     }
-
-    fetch(API, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams({
-        action: 'external_link_convert',
-        url: href
-      })
-    })
-      .then(function (r) { return r.json(); })
-      .then(function (data) {
-        if (data.success && data.data && data.data.url) {
-          window.location.href = data.data.url;
-        } else {
-          // 换链失败，直接打开原链接兜底
-          window.location.href = href;
-        }
-      })
-      .catch(function () {
-        // 网络错误，直接打开原链接兜底
-        window.location.href = href;
-      });
-  }
-
-  /**
-   * 为元素绑定点击事件（带 data-external-link 标记的外链）
-   * @param {Element} root
-   */
-  function bind(root) {
-    var links = root.querySelectorAll('a[data-external-link="1"]');
-    Array.prototype.forEach.call(links, function (a) {
-      if (a.dataset.externalLinkLiveBound) return;
-      a.dataset.externalLinkLiveBound = '1';
-      a.addEventListener('click', function (ev) {
-        ev.preventDefault(); // 阻止直接跳转，改为实时换链
-        convertAndGo(a);
+    containers.forEach(function (container) {
+      container.querySelectorAll('a[href]').forEach(function (link) {
+        if (isExternal(link.href)) link.dataset.externalLink = '1';
       });
     });
   }
 
-  // 初次绑定已渲染内容
-  bind(document);
+  function requestRedirectUrl(href) {
+    if (pending.has(href)) return pending.get(href);
+    var request = fetch(config.ajax_url, {
+      method: 'POST',
+      credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+      body: new URLSearchParams({ action: 'external_link_convert', url: href })
+    }).then(function (response) {
+      if (!response.ok) throw new Error('Link conversion failed');
+      return response.json();
+    }).then(function (data) {
+      return data.success && data.data && data.data.url ? data.data.url : href;
+    }).catch(function () {
+      return href;
+    }).finally(function () {
+      pending.delete(href);
+    });
+    pending.set(href, request);
+    return request;
+  }
 
-  // 监听动态加载内容
-  if ('MutationObserver' in window) {
-    var ob = new MutationObserver(function (list) {
-      list.forEach(function (m) {
-        m.addedNodes.forEach(function (n) {
-          if (n.nodeType !== 1) return;
-          if (n.matches && n.matches('a[data-external-link="1"]')) {
-            if (n.dataset.externalLinkLiveBound) return;
-            n.dataset.externalLinkLiveBound = '1';
-            n.addEventListener('click', function (ev) {
-              ev.preventDefault();
-              convertAndGo(n);
-            });
-          }
-          if (n.querySelectorAll) bind(n);
+  function preconvertScopedLinks(root) {
+    if (!config.selector || !root.querySelectorAll) return;
+    var containers = [];
+    try {
+      if (root.matches && root.matches(config.selector)) containers.push(root);
+      root.querySelectorAll(config.selector).forEach(function (container) { containers.push(container); });
+    } catch (error) {
+      return;
+    }
+    containers.forEach(function (container) {
+      container.querySelectorAll('a[href]').forEach(function (link) {
+        if (!isExternal(link.href) || link.dataset.externalLinkPrefetched || link.dataset.externalLinkPrefetching) return;
+        link.dataset.externalLink = '1';
+        link.dataset.externalLinkOriginal = link.href;
+        link.dataset.externalLinkPrefetching = '1';
+        requestRedirectUrl(link.href).then(function (redirectUrl) {
+          if (redirectUrl !== link.href) link.href = redirectUrl;
+          link.dataset.externalLinkPrefetched = '1';
+          delete link.dataset.externalLinkPrefetching;
         });
       });
     });
-    ob.observe(document.body, { childList: true, subtree: true });
+  }
+
+  function handleNavigation(event) {
+    var link = event.target.closest && event.target.closest('a[data-external-link="1"]');
+    if (!link || event.altKey) return;
+    var originalHref = link.dataset.externalLinkOriginal || link.href;
+    if (!isExternal(originalHref) && !link.dataset.externalLinkPrefetched) return;
+    if (event.type === 'click' && event.button !== 0) return;
+    if (event.type === 'auxclick' && event.button !== 1) return;
+
+    event.preventDefault();
+    var openedWindow = window.open('about:blank', '_blank');
+    link.setAttribute('aria-busy', 'true');
+
+    var redirectRequest = link.dataset.externalLinkPrefetched
+      ? Promise.resolve(link.href)
+      : requestRedirectUrl(originalHref);
+    redirectRequest.then(function (redirectUrl) {
+      link.removeAttribute('aria-busy');
+      if (openedWindow && !openedWindow.closed) {
+        openedWindow.opener = null;
+        openedWindow.location.replace(redirectUrl);
+      } else {
+        window.location.assign(redirectUrl);
+      }
+    });
+  }
+
+  markScopedLinks(document);
+  preconvertScopedLinks(document);
+  document.addEventListener('click', handleNavigation);
+  document.addEventListener('auxclick', handleNavigation);
+
+  if ('MutationObserver' in window && document.body) {
+    new MutationObserver(function (mutations) {
+      mutations.forEach(function (mutation) {
+        mutation.addedNodes.forEach(function (node) {
+          if (node.nodeType === 1) {
+            markScopedLinks(node);
+            preconvertScopedLinks(node);
+          }
+        });
+      });
+    }).observe(document.body, { childList: true, subtree: true });
   }
 })();

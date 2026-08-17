@@ -10,7 +10,7 @@
             <div class="external-link-tencent-title-div">
                 <div class="external-link-tencent-title-icon">
                     您即将离开
-                    <?php echo get_bloginfo('name'); ?>，请注意您的账号财产安全
+                    <?php echo esc_html(get_bloginfo('name')); ?>，请注意您的账号财产安全
                 </div>
                 <div class="external-link-tencent-titlelink">
                     <a>

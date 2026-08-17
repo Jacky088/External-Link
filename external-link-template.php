@@ -10,6 +10,10 @@ if (!defined('ABSPATH')) {
     exit;
 }
 
+status_header(200);
+nocache_headers();
+header('X-Robots-Tag: noindex, nofollow', true);
+
 // 缓存设置数据
 $settings = get_option('dmy_link_settings');
 
@@ -37,11 +41,6 @@ if (!file_exists($css_file)) {
     $style = 'external-link-default';
     $css_file = plugin_dir_path(__FILE__) . '/css/' . $style . '.css';
     $css_url = plugin_dir_url(__FILE__) . '/css/' . $style . '.css';
-}
-
-// 仅当文件存在时才加载样式
-if (file_exists($css_file)) {
-    wp_enqueue_style('external-link-template-style', $css_url, array(), filemtime($css_file));
 }
 
 // 安全加载头部模板

@@ -1,7 +1,7 @@
 <div class="external-tiktok-main-container">
   <div class="external-tiktok-external-link-image adpator_x_img">
     <img
-      src="<?php echo EXTERNAL_LINK_URL . 'assets/img/external-link-tiktok.png'; ?>"
+      src="<?php echo esc_url(EXTERNAL_LINK_URL . 'assets/img/external-link-tiktok.png'); ?>"
       alt="" class="image">
   </div>
 

@@ -14,7 +14,7 @@
     <a href="<?php echo esc_url($link); ?>" class="external-link-moxing-link-background-pink">
       继续前往
     </a>
-    <a href="<?php echo home_url(); ?>" class="external-link-moxing-link-background-blue">
+    <a href="<?php echo esc_url(home_url('/')); ?>" class="external-link-moxing-link-background-blue">
       回到主页
     </a>
   </div>
