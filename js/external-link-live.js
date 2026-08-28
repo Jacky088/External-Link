@@ -86,6 +86,10 @@
     if (event.type === 'auxclick' && event.button !== 1) return;
 
     event.preventDefault();
+    // 摘除 target，避免浏览器默认导航（target="_blank"）与下方 window.open 各自
+    // 打开一个新窗口。via 等浏览器在 document 冒泡阶段对 preventDefault 拦截
+    // target 链接并不可靠，此处额外移除 target 作为兜底，保证只开一个窗口。
+    link.removeAttribute('target');
     var openedWindow = window.open('about:blank', '_blank');
     link.setAttribute('aria-busy', 'true');
 
@@ -105,8 +109,10 @@
 
   markScopedLinks(document);
   preconvertScopedLinks(document);
-  document.addEventListener('click', handleNavigation);
-  document.addEventListener('auxclick', handleNavigation);
+  // 捕获阶段绑定：更早取消默认导航，防止 target="_blank" 链接在部分浏览器
+  // （如 via）中既触发默认新窗口、又被下方 window.open 再开一个窗口。
+  document.addEventListener('click', handleNavigation, true);
+  document.addEventListener('auxclick', handleNavigation, true);
 
   if ('MutationObserver' in window && document.body) {
     new MutationObserver(function (mutations) {

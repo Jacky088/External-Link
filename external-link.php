@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 外链跳转插件
  * Description: 外链跳转插件是一个非常实用的WordPress插件，它可以对文章中的外链进行过滤，有效地防止追踪和提醒用户。
- * Version: 1.1.1
+ * Version: 1.2.0
  * Author: 木木
  * Author URI: https://github.com/Jacky088/External-Link
  * Plugin URI: https://github.com/Jacky088/External-Link
@@ -37,14 +37,10 @@ function external_link_add_settings_link($actions) {
     return $actions;
 }
 
-if (!defined('ABSPATH')) {
-    exit;
-}
-
 // 插件统一版本
 function external_link_plugin_version()
 {
-    return "1.1.1";
+    return "1.2.0";
 }
 $version = external_link_plugin_version();
 
@@ -211,7 +207,9 @@ function external_link_enqueue_styles() {
         return; // 开关关闭时不加载样式
     }
 
-    wp_enqueue_style('external-link-csf-css', plugin_dir_url(__FILE__) . 'css/external-link.css', array(), '1.0', 'all');
+    // 使用文件修改时间作为缓存版本（而非写死版本号），升级/热更新插件后
+    // 文件一变浏览器即重新拉取，无需手动清缓存，也不依赖主插件版本号。
+    wp_enqueue_style('external-link-csf-css', plugin_dir_url(__FILE__) . 'css/external-link.css', array(), filemtime(plugin_dir_path(__FILE__) . 'css/external-link.css'), 'all');
     
     $selected_style = isset($settings['dmy_link_style']) ? $settings['dmy_link_style'] : 'external-link-default';
 
@@ -405,6 +403,13 @@ function external_link_urls_share_host($left, $right) {
         && external_link_normalize_host($left_parts['host']) === external_link_normalize_host($right_parts['host']);
 }
 
+// 匹配 <a ...> 起始标签并抽取 before/url/after 三段的正则。
+// 支持单/双引号 href、href 作为首个属性或位于其它属性之后，从而正确
+// 拦截图片海报、广告等以 <a><img></a> 形式包裹的外链（旧版仅匹配双引号）。
+function external_link_a_href_pattern() {
+    return '/<a(?:(?P<before>[^>]*?)\s+)?href\s*=\s*(?P<quote>["\'])(?P<url>[^"\']*)(?P=quote)(?P<after>[^>]*?)>/i';
+}
+
 // 拦截所有外部链接并生成跳转Key
 function external_link_intercept_links($content) {
     // 检查总开关状态
@@ -414,11 +419,11 @@ function external_link_intercept_links($content) {
     }
 
     return preg_replace_callback(
-        '/<a\s+([^>]*?)href="([^"]*)"([^>]*?)>/i', 
+        external_link_a_href_pattern(),
         function($matches) use ($settings) {
-            $url = $matches[2];
-            $beforeHref = $matches[1];
-            $afterHref = $matches[3];
+            $url = $matches['url'];
+            $beforeHref = $matches['before'];
+            $afterHref = $matches['after'];
 
             // 检查是否是内部链接或白名单链接
             if (!is_internal_link($url) && !is_whitelisted_link($url, 'dmy_link_settings')) {
@@ -608,27 +613,30 @@ add_action('init', 'external_link_redirect');
 
 
 // =============================================================
-// WebStack 导航主题适配
-// 导航条目 URL 存放于自定义字段 _sites_link，由模板直接 echo 输出，
-// 不经过 the_content 过滤器。同时该字段还被用于拼接 favicon 接口
-// 地址（如 format_url($m_link_url) 取域名），因此不能改写 _sites_link。
-// 采用 output buffer 方案：仅替换 HTML 中指向外链的 <a href="...">，
-// 完全不影响 <img src>、favicon 拼接等其它用途。
+// 前台整页外链接管（output buffer 方案）
+//
+// 部分内容不经过 the_content 过滤器：主题自带的网址导航、导航菜单
+// （wp_nav_menu）、侧栏/页脚、图片广告、以及 WebStack 导航条目的
+// _sites_link 字段等，均由模板直接 echo 输出。因此对整页 HTML 做
+// output buffer 统一接管，凡指向外链的 <a href="..."> 都追加
+// data-external-link 标记，由前端 JS 在点击时实时换取跳转链接。
+// 不写死跳转 URL、不改写原始 href/字段，利于 SEO 且不干扰 favicon、
+// 缩略图等其它用途。
 // =============================================================
 
 /**
- * 判断当前请求是否需要启用 WebStack 前台外链接管
+ * 判断当前前台请求是否需要启用页面级外链接管
  *
  * @return bool
  */
-function external_webstack_should_rewrite() {
+function external_page_should_rewrite() {
     // 总开关未启用则不做任何接管
     $settings = get_option('dmy_link_settings');
     if (empty($settings['dmy_link_enable'])) {
         return false;
     }
-    // 仅 WebStack 主题且仅前台浏览时接管，避免影响后台编辑/其它上下文
-    if (!is_webstack_themes() || is_admin()) {
+    // 仅前台浏览时接管，避免影响后台编辑/其它上下文
+    if (is_admin()) {
         return false;
     }
     // 排除 REST API / 后台异步请求，避免破坏编辑与接口场景
@@ -654,18 +662,18 @@ function external_webstack_should_rewrite() {
  * @param string $buffer
  * @return string
  */
-function external_webstack_buffer_rewrite_links($buffer) {
-    // 不处理非 HTML 内容（JSON / 空）
+function external_page_buffer_rewrite_links($buffer) {
+    // 不处理非 HTML 内容（空 / 非预期输出）
     if (empty($buffer)) {
         return $buffer;
     }
 
     return preg_replace_callback(
-        '/<a\s+([^>]*?)href="([^"]*)"([^>]*?)>/i',
+        external_link_a_href_pattern(),
         function ($m) {
-            $url        = $m[2];
-            $beforeHref = $m[1];
-            $afterHref  = $m[3];
+            $url        = $m['url'];
+            $beforeHref = $m['before'];
+            $afterHref  = $m['after'];
 
             // 跳过锚点、javascript、mailto 等非 http(s) 外链
             if (!preg_match('/^https?:\/\//i', $url)) {
@@ -676,7 +684,7 @@ function external_webstack_buffer_rewrite_links($buffer) {
                 return $m[0];
             }
 
-            // 已标记过则跳过，避免重复叠加属性
+            // 已标记过则跳过（含 the_content 已标记的），避免重复叠加属性
             if (stripos($beforeHref . $afterHref, 'data-external-link') !== false) {
                 return $m[0];
             }
@@ -691,15 +699,16 @@ function external_webstack_buffer_rewrite_links($buffer) {
 }
 
 /**
- * 在 WebStack 主题前台启动 output buffer，渲染完成后改写外链
+ * 在前台启动整页 output buffer，渲染完成后改写外链
+ * （适用于所有主题，覆盖网址导航、菜单、侧栏、页脚等不经 the_content 的位置）
  */
-function external_webstack_start_buffer() {
-    if (!external_webstack_should_rewrite()) {
+function external_page_start_buffer() {
+    if (!external_page_should_rewrite()) {
         return;
     }
-    ob_start('external_webstack_buffer_rewrite_links');
+    ob_start('external_page_buffer_rewrite_links');
 }
-add_action('template_redirect', 'external_webstack_start_buffer', 20);
+add_action('template_redirect', 'external_page_start_buffer', 20);
 
 // 添加重定向规则
 function external_link_rewrite_rules() {
@@ -807,41 +816,9 @@ add_action( 'wp_enqueue_scripts', function () {
         return; // 开关关闭时不加载脚本
     }
 
-    // 检查启用的功能类型
-    $enabled_type = '';
-    $selector = '';
-    
-    if (isset($settings['dmy_link_function_type'])) {
-        $enabled_type = $settings['dmy_link_function_type'];
-        
-        if ($enabled_type === 'circle') {
-            $selector = isset($settings['dmy_link_circle_selector']) && !empty($settings['dmy_link_circle_selector']) 
-                ? $settings['dmy_link_circle_selector'] 
-                : '.topic-content';
-        } elseif ($enabled_type === 'forums') {
-            $selector = isset($settings['dmy_link_forums_selector']) && !empty($settings['dmy_link_forums_selector']) 
-                ? $settings['dmy_link_forums_selector'] 
-                : '.forum-article';
-        }
-    }
-    
-    // 如果启用了任一功能，则加载脚本
-    if (false && !empty($enabled_type) && !empty($selector)) {
-        wp_enqueue_script(
-            'external-link-circle',
-            plugin_dir_url( __FILE__ ) . 'js/external-link-circle.js',
-            array(),
-            filemtime( plugin_dir_path( __FILE__ ) . 'js/external-link-circle.js' ),
-            true
-        );
-        
-        // 传递选择器设置到JavaScript
-        wp_localize_script('external-link-circle', 'external_link_circle_config', array(
-            'selector' => $selector,
-            'ajax_url' => admin_url('admin-ajax.php'),
-            'function_type' => $enabled_type
-        ));
-    }
+    // 注：圈子/社区选择器外链转链已由 external-link-live.js 通过
+    // dmy_link_function_type / dmy_link_*_selector 设置统一接管，
+    // 此处不再单独加载 external-link-circle.js（原脚本为死代码）。
 } );
 
 // 插件卸载时清理数据
