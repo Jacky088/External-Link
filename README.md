@@ -44,12 +44,13 @@
 - **8 套精美提示页样式**：默认(茉莉小栈)毛玻璃 / 哔哩哔哩 / 腾讯云社区 / CSDN / 知乎 / 通用跳转(紫蓝渐变) / 墨星博客 / TikTok 海外版。后台可视化预览，一键切换。
 - **两种加密验证机制**：
   - 随机字符串 Token + 过期机制（默认 5 分钟，可自定义 1–1440 分钟）
-  - AES-256-GCM 自包含加密 URL（永久有效、无需数据库），兼容旧 CBC 链接
+  - AES-256-GCM 自包含加密 URL（无需数据库，有效期可自定义，默认永久有效），兼容旧 g1 / CBC 链接
 - **Referer 防护**：开启后禁止站外直接访问跳转页（403），支持空 Referer 放行与白名单。
 - **可自定义跳转页 Slug**：默认 `dinterception`，后台修改即自动刷新 Rewrite。
 - **Logo 自定义**：支持上传自定义 Logo，未设置时优雅回退。
 - **主题深度适配**：子比(zibll)主题自动关闭其原生外链重定向并接管相关过滤器；7b2 主题圈子支持自定义 CSS 选择器。
-- **AJAX 动态转链**：基于 `MutationObserver` + `requestIdleCallback` 扫描选择器内新增的链接，配合公开 AJAX 接口(Nginx 缓存友好)完成转换。
+- **AJAX 动态转链**：基于 `MutationObserver` + `requestIdleCallback` 扫描选择器内新增的链接，配合公开 AJAX 接口(Nginx 缓存友好、内置按 IP 限流)完成转换。
+- **热更新友好**：CSS/JS 缓存版本由「插件版本号 + 文件修改时间」双维度生成，热替换/升级插件文件后浏览器自动拉取新资源，无需手动清缓存。
 - **优雅卸载**：自动清理 options、transient、Rewrite，无残留。
 
 ---
@@ -116,9 +117,11 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 | **安全设置** | 链接验证方式 | radio | `random_string` | `random_string` / `aes_encryption` |
 | | 过期时间(分钟) | number | `5` | 1–1440，仅 random_string 类型显示 |
 | | AES 加密密钥 | text | 自动随机 32 位 hex | 仅 aes_encryption 类型显示 |
+| | AES Token 有效期(分钟) | number | `0` | 0=永不过期，最大 43200(30 天)，仅 aes_encryption 类型显示 |
 | | 启用 Referer 防护 | switcher | ❌ | 开启后禁止站外直接访问跳转页 |
 | | 允许空 Referer | switcher | ✅ | 仅 Referer 防护开启时显示 |
 | | Referer 白名单 | textarea | — | 每行一个域名/URL，仅 Referer 防护开启时显示 |
+| | 换链接口拒绝空 Referer | switcher | ❌ | 开启后实时换链接口拒绝无 Referer 请求，防止脚本批量滥用 |
 
 ---
 
@@ -150,15 +153,22 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 
 ### AES-256-GCM 自包含加密
 
-- 形态：URL 自带 `IV(16B) + 密文`，整体 base64
+- 形态：`g2.` 前缀 + base64url(`随机 IV(12B) + 认证标签(16B) + 密文`)，明文为「过期时间戳|URL」
 - 存储：**无需**数据库，密文完全自包含（不写入任何 transient / options，避免表膨胀）
-- 有效期：永久有效（依赖密钥不变）
+- 有效期：后台可自定义，`0` = 永不过期（默认），最大 43200 分钟（30 天）；过期后访问触发 404 提示页
+- 兼容性：旧版 `g1.` Token（无过期信息）与更早的 AES-CBC 链接均可继续解密跳转
 - 兜底机制：AES 失效/缺密钥时自动回退到随机字符串方式
 
 ### Referer 防护
 
 - 默认关闭，开启后访问跳转页若 Referer 非本站且不在白名单，直接 403
 - 支持「允许空 Referer」与自定义白名单，兼顾 SEO 与安全
+
+### 接口限流与防滥用
+
+- 实时换链接口按 IP 限流：默认 **120 次/分钟**，可通过 `external_link_rate_limit` 过滤器调整（设为 0 关闭）
+- Referer 非本站的请求直接 403；另提供「换链接口拒绝空 Referer」开关（默认关闭，兼容严格 Referrer-Policy 的站点）
+- 跳转逻辑排除后台 / AJAX / REST 请求，后台 URL 携带 `?a=` 参数不会误触发跳转
 
 ---
 
@@ -175,7 +185,7 @@ git clone https://github.com/Jacky088/External-Link.git external-link
 
 - ✅ **圈子功能(circle)**：通过 CSS 选择器(默认 `.topic-content`，可后台自定义)扫描动态加载的外链
 - ✅ 基于 `MutationObserver` + `requestIdleCallback` 异步处理，不阻塞首屏渲染
-- ✅ 防重复处理：已处理链接标记 `dataset.externalLinkDone='1'`
+- ✅ 防重复处理：已标记(`data-external-link`)或已预取(`dataset.externalLinkPrefetched`)的链接自动跳过
 
 ### 全站整页接管（所有主题通用）
 
@@ -200,7 +210,6 @@ external-link/
 ├── assets/
 │   └── img/                   # 样式预览与提示页素材
 ├── js/
-│   ├── external-link-circle.js  # 圈子/社区选择器扫描
 │   └── external-link-live.js    # 前端实时换链(防缓存过期)
 ├── css/
 │   ├── external-link.css               # 基础样式
