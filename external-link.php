@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 外链跳转插件
  * Description: 外链跳转插件是一个非常实用的WordPress插件，它可以对文章中的外链进行过滤，有效地防止追踪和提醒用户。
- * Version: 1.2.0
+ * Version: 1.2.2
  * Author: 木木
  * Author URI: https://github.com/Jacky088/External-Link
  * Plugin URI: https://github.com/Jacky088/External-Link
@@ -40,9 +40,17 @@ function external_link_add_settings_link($actions) {
 // 插件统一版本
 function external_link_plugin_version()
 {
-    return "1.2.0";
+    return "1.2.2";
 }
 $version = external_link_plugin_version();
+
+// 前端资源缓存版本：插件版本号 + 文件修改时间 双维度。
+// 升级/热替换插件文件后，任一变化都会让浏览器重新拉取，无需手动清缓存；
+// 兼容保留 mtime 的部署方式（rsync -a、部分 FTP 工具），此时靠版本号击穿缓存。
+function external_link_asset_version($abs_path) {
+    $mtime = @filemtime($abs_path);
+    return external_link_plugin_version() . '.' . ($mtime ? (string) $mtime : '0');
+}
 
 // 定义插件路径常量
 define('EXTERNAL_LINK_PLUGIN_DIR', plugin_dir_path(__FILE__));
@@ -207,16 +215,19 @@ function external_link_enqueue_styles() {
         return; // 开关关闭时不加载样式
     }
 
-    // 使用文件修改时间作为缓存版本（而非写死版本号），升级/热更新插件后
-    // 文件一变浏览器即重新拉取，无需手动清缓存，也不依赖主插件版本号。
-    wp_enqueue_style('external-link-csf-css', plugin_dir_url(__FILE__) . 'css/external-link.css', array(), filemtime(plugin_dir_path(__FILE__) . 'css/external-link.css'), 'all');
+    // 缓存版本由「插件版本号 + 文件修改时间」共同生成（见 external_link_asset_version），
+    // 升级/热更新插件后浏览器自动重新拉取，无需手动清缓存。
+    $base_css_path = plugin_dir_path(__FILE__) . 'css/external-link.css';
+    if (file_exists($base_css_path)) {
+        wp_enqueue_style('external-link-csf-css', plugin_dir_url(__FILE__) . 'css/external-link.css', array(), external_link_asset_version($base_css_path), 'all');
+    }
     
-    $selected_style = isset($settings['dmy_link_style']) ? $settings['dmy_link_style'] : 'external-link-default';
+    $selected_style = external_link_sanitize_style(isset($settings['dmy_link_style']) ? $settings['dmy_link_style'] : 'external-link-default');
 
     if ($selected_style) {
         $css_file_path = plugin_dir_path(__FILE__) . 'css/' . $selected_style . '.css';
         if (file_exists($css_file_path)) {
-            wp_enqueue_style('external-link-custom-style', plugin_dir_url(__FILE__) . 'css/' . $selected_style . '.css', array(), filemtime($css_file_path), 'all');
+            wp_enqueue_style('external-link-custom-style', plugin_dir_url(__FILE__) . 'css/' . $selected_style . '.css', array(), external_link_asset_version($css_file_path), 'all');
         }
     }
 
@@ -247,7 +258,7 @@ function external_link_enqueue_live_script() {
         'external-link-live',
         plugin_dir_url(__FILE__) . 'js/external-link-live.js',
         array(),
-        filemtime($js_file_path),
+        external_link_asset_version($js_file_path),
         true
     );
 
@@ -268,6 +279,15 @@ function external_link_enqueue_live_script() {
 }
 add_action('wp_enqueue_scripts', 'external_link_enqueue_live_script', 15);
 
+// AES Token 有效期（分钟），0 表示永不过期（与旧版 g1 行为一致，默认不改变现有行为）
+function external_link_aes_expiration() {
+    $settings = get_option('dmy_link_settings');
+    if (!isset($settings['dmy_link_aes_expiration'])) {
+        return 0;
+    }
+    return max(0, min(43200, (int) $settings['dmy_link_aes_expiration']));
+}
+
 // 统一URL加密函数
 function external_link_encrypt_url($url) {
     $settings = get_option('dmy_link_settings');
@@ -286,13 +306,16 @@ function external_link_encrypt_url($url) {
             return false;
         }
 
+        // g2 格式：明文为 过期时间戳|URL（0 表示永不过期），解密时校验时效
+        $plaintext = external_link_aes_expiration() . '|' . $url;
+
         $nonce = random_bytes(12);
         $tag = '';
-        $encrypted = openssl_encrypt($url, 'aes-256-gcm', hash('sha256', $key, true), OPENSSL_RAW_DATA, $nonce, $tag);
+        $encrypted = openssl_encrypt($plaintext, 'aes-256-gcm', hash('sha256', $key, true), OPENSSL_RAW_DATA, $nonce, $tag);
         if ($encrypted === false || strlen($tag) !== 16) {
             return false;
         }
-        return 'g1.' . external_link_base64url_encode($nonce . $tag . $encrypted);
+        return 'g2.' . external_link_base64url_encode($nonce . $tag . $encrypted);
     } else {
         // 随机字符串方式（默认）
         return generate_random_string(16);
@@ -312,6 +335,37 @@ function external_link_base64url_decode($value) {
 }
 
 function external_link_decrypt_url($encrypted_key, $key) {
+    $derived_key = hash('sha256', $key, true);
+
+    // g2：明文为 过期时间戳|URL（0 表示永不过期），过期则拒绝
+    if (strpos($encrypted_key, 'g2.') === 0) {
+        $raw = external_link_base64url_decode(substr($encrypted_key, 3));
+        if ($raw === false || strlen($raw) <= 28) {
+            return false;
+        }
+        $plain = openssl_decrypt(
+            substr($raw, 28),
+            'aes-256-gcm',
+            $derived_key,
+            OPENSSL_RAW_DATA,
+            substr($raw, 0, 12),
+            substr($raw, 12, 16)
+        );
+        if ($plain === false) {
+            return false;
+        }
+        $sep = strpos($plain, '|');
+        if ($sep === false) {
+            return false;
+        }
+        $expires = (int) substr($plain, 0, $sep);
+        if ($expires > 0 && $expires < time()) {
+            return false;
+        }
+        return substr($plain, $sep + 1);
+    }
+
+    // g1：旧版 GCM Token（无过期信息），保持兼容可用
     if (strpos($encrypted_key, 'g1.') === 0) {
         $raw = external_link_base64url_decode(substr($encrypted_key, 3));
         if ($raw === false || strlen($raw) <= 28) {
@@ -320,7 +374,7 @@ function external_link_decrypt_url($encrypted_key, $key) {
         return openssl_decrypt(
             substr($raw, 28),
             'aes-256-gcm',
-            hash('sha256', $key, true),
+            $derived_key,
             OPENSSL_RAW_DATA,
             substr($raw, 0, 12),
             substr($raw, 12, 16)
@@ -354,6 +408,15 @@ function external_link_sanitize_slug($slug) {
     $slug = trim($slug, '-');
     if ($slug === '') { $slug = 'dinterception'; }
     return $slug;
+}
+
+/**
+ * 样式标识清洗：仅保留小写字母、数字和短横线，
+ * 防止 ../ 等路径穿越字符进入 CSS/模板文件路径
+ */
+function external_link_sanitize_style($style) {
+    $style = strtolower((string) $style);
+    return (string) preg_replace('/[^a-z0-9\-]/', '', $style);
 }
 
 /**
@@ -548,6 +611,11 @@ function external_link_redirect() {
         return; // 开关关闭时不处理重定向
     }
 
+    // 后台 / AJAX / REST 请求一律不处理：避免后台或接口 URL 携带 ?a= 时
+    // 误触发跳转或 wp_die（admin-ajax.php 与 REST 请求也运行 init 钩子）
+    if (is_admin() || wp_doing_ajax() || (defined('REST_REQUEST') && REST_REQUEST)) {
+        return;
+    }
 
     if (isset($_GET['a'])) {
         // Referer 防护 禁止站外直接访问跳转页
@@ -668,6 +736,34 @@ function external_page_buffer_rewrite_links($buffer) {
         return $buffer;
     }
 
+    // 跳过 <script>/<style>/<textarea> 内部内容：JSON-LD、内联模板等常含
+    // <a href="..."> 字符串，写入 data-external-link 会破坏其语法
+    $parts = preg_split(
+        '/(<script\b[^>]*>.*?<\/script\s*>|<style\b[^>]*>.*?<\/style\s*>|<textarea\b[^>]*>.*?<\/textarea\s*>)/is',
+        $buffer,
+        -1,
+        PREG_SPLIT_DELIM_CAPTURE
+    );
+    if ($parts === false || count($parts) === 1) {
+        return external_page_rewrite_links_fragment($buffer);
+    }
+
+    foreach ($parts as $i => $part) {
+        if ($i % 2 === 1) {
+            continue; // 捕获的整块标签原样保留
+        }
+        $parts[$i] = external_page_rewrite_links_fragment($part);
+    }
+    return implode('', $parts);
+}
+
+/**
+ * 对 HTML 片段执行外链标记改写（external_page_buffer_rewrite_links 的处理单元）
+ *
+ * @param string $fragment
+ * @return string
+ */
+function external_page_rewrite_links_fragment($fragment) {
     return preg_replace_callback(
         external_link_a_href_pattern(),
         function ($m) {
@@ -694,7 +790,7 @@ function external_page_buffer_rewrite_links($buffer) {
 
             return '<a ' . $beforeHref . 'href="' . $url . '"' . $afterHref . '>';
         },
-        $buffer
+        $fragment
     );
 }
 
@@ -754,6 +850,29 @@ add_action('template_redirect', 'external_link_template_redirect');
 add_action('wp_ajax_external_link_convert', 'external_link_ajax_convert');
 add_action('wp_ajax_nopriv_external_link_convert', 'external_link_ajax_convert');
 
+/**
+ * 简单按 IP 限流（基于 transient，对象缓存环境下开销极小）。
+ * 每分钟每 IP 默认最多 120 次（一页几十个外链的预取也够用），
+ * 可通过 external_link_rate_limit 过滤器调整；返回 false 表示超限。
+ */
+function external_link_rate_limit_ok($window = 60) {
+    $limit = (int) apply_filters('external_link_rate_limit', 120);
+    if ($limit <= 0) {
+        return true; // <=0 视为关闭限流
+    }
+    $ip = isset($_SERVER['REMOTE_ADDR']) ? (string) $_SERVER['REMOTE_ADDR'] : '';
+    if ($ip === '') {
+        return true;
+    }
+    $key = 'dmy_link_rl_' . md5($ip);
+    $count = (int) get_transient($key);
+    if ($count >= $limit) {
+        return false;
+    }
+    set_transient($key, $count + 1, $window);
+    return true;
+}
+
 function external_link_ajax_convert() {
     // 此接口为公开URL加密服务（非状态修改操作），同时注册了 nopriv
     // Nginx 缓存环境下 PHP 输出的 nonce 会过期，因此不使用 check_ajax_referer
@@ -767,6 +886,16 @@ function external_link_ajax_convert() {
     $settings = get_option('dmy_link_settings');
     if (empty($settings['dmy_link_enable'])) {
         wp_send_json_error(array('message' => '插件已关闭'));
+    }
+
+    // 按 IP 限流，防止被批量铸造跳转 Token、灌爆 options 表
+    if (!external_link_rate_limit_ok()) {
+        wp_send_json_error(array('message' => '请求过于频繁，请稍后再试'), 429);
+    }
+
+    // 可选：拒绝空 Referer 请求（默认关闭，兼容设置了严格 Referrer-Policy 的站点）
+    if (!$referer && !empty($settings['dmy_link_ajax_block_empty_referer'])) {
+        wp_send_json_error(array('message' => '非法请求'), 403);
     }
 
     $url = isset($_POST['url']) ? external_link_normalize_url($_POST['url']) : false;

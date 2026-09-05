@@ -17,8 +17,11 @@ header('X-Robots-Tag: noindex, nofollow', true);
 // 缓存设置数据
 $settings = get_option('dmy_link_settings');
 
-// 获取风格标识
-$style = isset($settings['dmy_link_style']) ? sanitize_text_field($settings['dmy_link_style']) : 'external-link-default';
+// 获取风格标识（仅保留小写字母、数字和短横线，防止路径穿越字符进入文件路径）
+$style = external_link_sanitize_style(isset($settings['dmy_link_style']) ? $settings['dmy_link_style'] : 'external-link-default');
+if ($style === '') {
+    $style = 'external-link-default';
+}
 
 // 定义风格模板映射
 define('EXTERNAL_LINK_TEMPLATES', [

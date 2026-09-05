@@ -349,7 +349,17 @@ function external_link_create_security_section($prefix) {
                 'type'      => 'text',
                 'title'     => 'AES加密密钥',
                 'desc'      => '请输入32个字符的密钥（用于加密跳转链接）',
-                'default'   => bin2hex(openssl_random_pseudo_bytes(16)),
+                'default'   => function_exists('random_bytes') ? bin2hex(random_bytes(16)) : bin2hex(openssl_random_pseudo_bytes(16)),
+                'dependency' => ['dmy_link_verification_method', '==', 'aes_encryption'],
+            ],
+            [
+                'id'        => 'dmy_link_aes_expiration',
+                'type'      => 'number',
+                'title'     => 'AES Token 有效期（分钟）',
+                'desc'      => 'AES 加密模式跳转链接的有效期，0 表示永不过期（默认，与旧版本行为一致）。建议按站点 CDN/页面缓存的时长设置，例如 1440（24 小时）。',
+                'default'   => 0,
+                'min'       => 0,
+                'max'       => 43200,
                 'dependency' => ['dmy_link_verification_method', '==', 'aes_encryption'],
             ],
             [
@@ -374,6 +384,13 @@ function external_link_create_security_section($prefix) {
                 'desc'      => '每行一个域名或URL（例如 example.com 或 https://sub.example.com）。在启用 Referer 防护时，允许这些来源访问跳转页。',
                 'default'   => '',
                 'dependency' => ['dmy_link_referer_protect', '==', 'true'],
+            ],
+            [
+                'id'      => 'dmy_link_ajax_block_empty_referer',
+                'type'    => 'switcher',
+                'title'   => '换链接口拒绝空 Referer',
+                'desc'    => '开启后，前端实时换链接口将拒绝不带 Referer 的请求，进一步防止接口被脚本批量滥用（默认关闭，兼容设置了严格 Referrer-Policy 的站点）。',
+                'default' => false,
             ],
         ],
     ]);

@@ -19,7 +19,7 @@ if (!empty($user_logo)) {
     <meta charset="<?php bloginfo('charset'); ?>">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="robots" content="noindex,nofollow">
-    <link rel="stylesheet" href="<?php echo esc_url(add_query_arg('ver', filemtime($css_file), $css_url)); ?>" type="text/css">
+    <link rel="stylesheet" href="<?php echo esc_url(add_query_arg('ver', external_link_asset_version($css_file), $css_url)); ?>" type="text/css">
     <?php 
     $settings = get_option('dmy_link_settings');
     $style = isset($settings['dmy_link_style']) ? $settings['dmy_link_style'] : 'external-link-default';
