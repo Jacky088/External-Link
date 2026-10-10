@@ -27,7 +27,7 @@ function external_link_settings() {
     
     $prefix = 'dmy_link_settings';
     $version = external_link_plugin_version();
-    
+
     // 创建设置页面
     CSF::createOptions($prefix, [
         'menu_title'      => '外链跳转插件',
@@ -35,13 +35,22 @@ function external_link_settings() {
         'menu_type'       => 'menu',
         'menu_icon'       => 'dashicons-admin-links',
         'menu_position'   => 59,
-        'framework_title' => '外链跳转插件 <small style="color: #fff;">v'.$version.'</small>',
-        'footer_text'     => '<style>html body .csf-theme-light .csf-header-inner::before { content: "EL" !important; }</style>版本:V'.$version,
+        'framework_title' => '外链跳转插件 <span class="el-badge">v'.$version.'</span><span class="el-subtitle">让外部链接更安全、更可控</span>',
+        'footer_text'     => '版本:V'.$version,
         'show_bar_menu'   => false,
-        'theme'           => is_zibll_themes() ? 'light' : 'dark',
+        'theme'           => 'light',
         'show_in_customizer' => false,
+        // 顶部不放任何按钮：搜索、展开全部、粘性头部、未保存提醒全部关闭，按钮统一由底部操作栏提供
+        'show_search'     => false,
+        'show_all_options' => false,
+        'sticky_header'   => false,
+        'show_form_warning' => false,
+        'show_footer'     => true,
         'footer_credit'   => '<i class="fa fa-fw fa-heart-o" aria-hidden="true"></i> 感谢您使用外链跳转插件',
     ]);
+
+    // 后台美化样式（依赖 CSF 已入队 FontAwesome，见 css/admin/admin-ui.css 头部说明）
+    add_action('admin_enqueue_scripts', 'external_link_enqueue_admin_ui_css');
 
     // 添加各个设置面板
     external_link_create_basic_section($prefix);
@@ -55,10 +64,84 @@ function external_link_settings() {
 }
 
 /**
+ * 后台设置页美化样式入队
+ * 仅在当前屏幕为插件设置页时加载，避免影响其他后台页面
+ */
+function external_link_enqueue_admin_ui_css() {
+    if (empty($_GET['page']) || $_GET['page'] !== 'dmy_link_settings') {
+        return;
+    }
+
+    $css_path = EXTERNAL_LINK_PLUGIN_DIR . 'css/admin/admin-ui.css';
+    if (!file_exists($css_path)) {
+        return;
+    }
+
+    wp_enqueue_style(
+        'external-link-admin-ui',
+        plugins_url('css/admin/admin-ui.css', EXTERNAL_LINK_PLUGIN_DIR . 'external-link.php'),
+        array('csf'),
+        external_link_asset_version($css_path)
+    );
+}
+
+/**
+ * 分区标题卡片（效果图样式：圆形图标 + 标题 + 副标题）
+ *
+ * @param string $icon  FontAwesome 5 图标类名（fa fa-xxx）
+ * @param string $title 标题
+ * @param string $desc  副标题描述
+ * @param string $color 图标主色（默认主题蓝）
+ */
+function external_link_section_head_field($icon, $title, $desc, $color = '#3b82f6') {
+    return [
+        'type'    => 'content',
+        'content' => '<div class="el-sec-head">'
+            . '<span class="el-sec-icon fa ' . esc_attr($icon) . '" style="--cc:' . esc_attr($color) . '"></span>'
+            . '<div><h3>' . esc_html($title) . '</h3>'
+            . '<p>' . esc_html($desc) . '</p></div>'
+            . '</div>',
+    ];
+}
+
+/**
+ * 字段标题前的小圆图标（写入字段 title 内使用）
+ */
+function external_link_title_chip($icon, $color = '#3b82f6', $bg = '#eaf2ff') {
+    return '<span class="el-chip fa ' . esc_attr($icon) . '" style="--cc:' . esc_attr($color) . ';--cb:' . esc_attr($bg) . '"></span>';
+}
+
+/**
+ * 蓝色提示框（字段 desc 内使用）
+ */
+function external_link_tip_box($text) {
+    return '<div class="el-tip"><span class="el-tip-icon fa fa-info-circle"></span><span>' . $text . '</span></div>';
+}
+
+/**
  * 创建基本设置面板
  */
 function external_link_create_basic_section($prefix) {
     $fields = [];
+
+    // 欢迎横幅（效果图顶部欢迎区）
+    $fields[] = [
+        'type'    => 'content',
+        'content' => '<div class="el-hero">'
+            . '<div class="el-hero-main">'
+            . '<div class="el-hero-title">👋 欢迎使用外链跳转插件</div>'
+            . '<div class="el-hero-desc">通过中间跳转页保护用户安全，防止恶意外链，提升网站可信度。</div>'
+            . '</div>'
+            . '<div class="el-hero-feats">'
+            . '<div class="el-feat" style="--cc:#16a34a;--cb:#e8f9ef"><span class="el-feat-icon fa fa-shield-alt"></span><b>提升安全性</b><i>拦截恶意链接</i></div>'
+            . '<div class="el-feat" style="--cc:#f59e0b;--cb:#fef4e2"><span class="el-feat-icon fa fa-bolt"></span><b>优化用户体验</b><i>可自定义跳转页</i></div>'
+            . '<div class="el-feat" style="--cc:#8b5cf6;--cb:#f3eefe"><span class="el-feat-icon fa fa-chart-simple"></span><b>简单易用</b><i>快速配置生效</i></div>'
+            . '</div>'
+            . '</div>',
+    ];
+
+    // 分区标题
+    $fields[] = external_link_section_head_field('fa-cog', '基本设置', '控制插件的核心功能和跳转规则', '#3b82f6');
 
     // 子比主题环境下显示冲突提示
     if (is_zibll_themes()) {
@@ -90,15 +173,16 @@ function external_link_create_basic_section($prefix) {
     $fields[] = [
         'id'      => 'dmy_link_enable',
         'type'    => 'switcher',
-        'title'   => '启用插件功能',
+        'title'   => external_link_title_chip('fa-power-off', '#16a34a', '#e8f9ef') . '启用插件功能',
         'label'   => '关闭后插件所有功能将停止工作',
         'default' => true,
     ];
     $fields[] = [
         'id'      => 'dmy_link_slug',
         'type'    => 'text',
-        'title'   => '跳转页路径（Slug）',
-        'desc'    => '用于生成跳转页地址，例如 /dinterception；只允许小写字母、数字和短横线。修改后保存设置会自动刷新固定链接。',
+        'title'   => external_link_title_chip('fa-link', '#3b82f6', '#eaf2ff') . '跳转页路径（Slug）',
+        'desc'    => '用于生成跳转页地址，例如 /dinterception；只允许小写字母、数字和短横线。'
+            . external_link_tip_box('<b>提示</b>修改后保存设置会自动刷新固定链接，确保跳转页面正常访问。'),
         'default' => 'dinterception',
         'sanitize' => 'external_link_sanitize_slug',
     ];
@@ -118,13 +202,14 @@ function external_link_create_whitelist_section($prefix) {
         'title'  => '白名单设置',
         'icon'   => 'fa fa-id-card-o',
         'fields' => [
+            external_link_section_head_field('fa-id-card-o', '白名单设置', '配置无需跳转的外部链接域名', '#22c55e'),
             [
                 'id'    => 'dmy_link_whitelist',
                 'type'  => 'textarea',
                 'attributes'  => array(
                     'rows' => 5,
                 ),
-                'title' => '白名单链接',
+                'title' => external_link_title_chip('fa-list-ul', '#22c55e', '#e8f9ef') . '白名单链接',
                 'desc'  => 'wordpress设置的地址默认为白名单，每行一个链接，不需要加http://或者https://',
                 'default' => '',
             ],
@@ -142,6 +227,7 @@ function external_link_create_style_section($prefix) {
         'title'  => '样式设置',
         'icon'   => 'fa fa-paint-brush',
         'fields' => [
+            external_link_section_head_field('fa-paint-brush', '样式设置', '自定义跳转页的外观样式', '#f59e0b'),
             [
                 'type' => 'content',
                 'content' => '<style>
@@ -236,7 +322,7 @@ function external_link_create_style_section($prefix) {
             [
                 'id'      => 'dmy_link_style',
                 'type'    => 'image_select',
-                'title'   => '提示页面样式',
+                'title'   => external_link_title_chip('fa-image', '#f59e0b', '#fef4e2') . '提示页面样式',
                 'desc'    => '上方切换样式（点击图片进行选择），下方显示对应的预览图',
                 'options' => [
                     'external-link-default'  => $plugin_url . 'assets/img/default-min.png',
@@ -263,10 +349,11 @@ function external_link_create_community_section($prefix) {
         'title'  => '主题社区功能',
         'icon'   => 'fa fa-comments',
         'fields' => [
+            external_link_section_head_field('fa-comments', '主题社区功能', '适配主题社区内容的链接接管', '#8b5cf6'),
             [
                 'id'      => 'dmy_link_function_type',
                 'type'    => 'radio',
-                'title'   => '选择社区功能类型',
+                'title'   => external_link_title_chip('fa-comments', '#8b5cf6', '#f3eefe') . '选择社区功能类型',
                 'desc'    => '选择您要启用的社区功能类型，只能选择一项',
                 'options' => [
                     'none'   => '不启用任何社区功能',
@@ -304,10 +391,11 @@ function external_link_create_logo_section($prefix) {
         'title'  => 'Logo 设置',
         'icon'   => 'fa fa-image',
         'fields' => [
+            external_link_section_head_field('fa-image', 'Logo 设置', '跳转页展示的站点 Logo', '#0ea5e9'),
             [
                 'id'    => 'dmy_link_logo',
                 'type'  => 'upload',
-                'title' => 'Logo 图片',
+                'title' => external_link_title_chip('fa-image', '#0ea5e9', '#e8f6fd') . 'Logo 图片',
                 'desc'  => '上传一个图片作为 logo,如果您不设置，插件并不会自动获取您网站的logo',
                 'default' => '',
             ],
@@ -323,10 +411,11 @@ function external_link_create_security_section($prefix) {
         'title'  => '安全设置',
         'icon'   => 'fa fa-lock',
         'fields' => [
+            external_link_section_head_field('fa-shield-alt', '安全设置', '链接验证机制与访问防护', '#ef4444'),
             [
                 'id'      => 'dmy_link_verification_method',
                 'type'    => 'radio',
-                'title'   => '链接验证方式',
+                'title'   => external_link_title_chip('fa-shield-alt', '#ef4444', '#fdeaea') . '链接验证方式',
                 'options' => [
                     'random_string'  => '随机字符串 + 过期机制',
                     'aes_encryption' => 'AES加密 + 后端验证',
@@ -365,7 +454,7 @@ function external_link_create_security_section($prefix) {
             [
                 'id'      => 'dmy_link_referer_protect',
                 'type'    => 'switcher',
-                'title'   => '启用 Referer 防护',
+                'title'   => external_link_title_chip('fa-shield-alt', '#ef4444', '#fdeaea') . '启用 Referer 防护',
                 'desc'    => '开启后，禁止非本站 Referer 直接访问跳转页（例如 /dinterception 或自定义）',
                 'default' => false,
             ],
