@@ -1,8 +1,10 @@
 <?php
 /**
- * Plugin Name: 外链跳转插件
- * Description: 外链跳转插件是一个非常实用的WordPress插件，它可以对文章中的外链进行过滤，有效地防止追踪和提醒用户。
+ * Plugin Name: 外链跳转
+ * Description: 外链跳转是一个非常实用的WordPress插件，它可以对文章中的外链进行过滤，有效地防止追踪和提醒用户。
  * Version: 1.3.0
+ * Requires at least: 6.4
+ * Requires PHP: 7.4
  * Author: 木木
  * Author URI: https://github.com/Jacky088/External-Link
  * Plugin URI: https://github.com/Jacky088/External-Link

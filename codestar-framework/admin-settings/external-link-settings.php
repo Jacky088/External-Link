@@ -30,12 +30,12 @@ function external_link_settings() {
 
     // 创建设置页面
     CSF::createOptions($prefix, [
-        'menu_title'      => '外链跳转插件',
+        'menu_title'      => '外链跳转',
         'menu_slug'       => $prefix,
         'menu_type'       => 'menu',
         'menu_icon'       => 'dashicons-admin-links',
         'menu_position'   => 59,
-        'framework_title' => '外链跳转插件 <span class="el-badge">v'.$version.'</span><span class="el-subtitle">让外部链接更安全、更可控</span>',
+        'framework_title' => '外链跳转 <span class="el-badge">v'.$version.'</span><span class="el-subtitle">让外部链接更安全、更可控</span>',
         'footer_text'     => '版本:V'.$version,
         'show_bar_menu'   => false,
         'theme'           => 'light',
@@ -46,7 +46,7 @@ function external_link_settings() {
         'sticky_header'   => false,
         'show_form_warning' => false,
         'show_footer'     => true,
-        'footer_credit'   => '<i class="fa fa-fw fa-heart-o" aria-hidden="true"></i> 感谢您使用外链跳转插件',
+        'footer_credit'   => '<i class="fa fa-fw fa-heart-o" aria-hidden="true"></i> 感谢您使用外链跳转',
     ]);
 
     // 后台美化样式（依赖 CSF 已入队 FontAwesome，见 css/admin/admin-ui.css 头部说明）
@@ -129,7 +129,7 @@ function external_link_create_basic_section($prefix) {
         'type'    => 'content',
         'content' => '<div class="el-hero">'
             . '<div class="el-hero-main">'
-            . '<div class="el-hero-title">👋 欢迎使用外链跳转插件</div>'
+            . '<div class="el-hero-title">👋 欢迎使用外链跳转</div>'
             . '<div class="el-hero-desc">通过中间跳转页保护用户安全，防止恶意外链，提升网站可信度。</div>'
             . '</div>'
             . '<div class="el-hero-feats">'

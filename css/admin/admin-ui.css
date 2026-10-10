@@ -9,10 +9,6 @@
 
 /* ========== 全局布局骨架 ========== */
 
-.csf-options {
-    --el-version: "v1.3.0";
-}
-
 .csf-options .csf-container {
     border: 1px solid #e7ebf3;
     border-radius: 16px;
@@ -201,24 +197,6 @@
 /* 去掉激活项右侧的白色小三角 */
 .csf-options .csf-nav-normal ul li .csf-active:after {
     display: none;
-}
-
-/* 侧栏底部品牌区块 */
-.csf-options .csf-nav::after {
-    content: "简单配置 · 安全跳转\A为你的网站保驾护航\A\A版本 " var(--el-version, "v1.3.0");
-    display: block;
-    margin: 30px 2px 6px;
-    padding: 68px 12px 16px;
-    border: 1px solid #e8eefb;
-    border-radius: 14px;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%237d9bf0' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71'/%3E%3Cpath d='M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71'/%3E%3C/svg%3E"), linear-gradient(160deg, #f3f7ff, #f7f3ff);
-    background-repeat: no-repeat;
-    background-position: top 16px center, center;
-    background-size: 38px 38px, auto;
-    text-align: center;
-    color: #93a0b5;
-    font-size: 12px;
-    line-height: 1.9;
 }
 
 /* ========== 内容区：分区大卡片 ========== */
