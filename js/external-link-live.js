@@ -4,32 +4,22 @@
   if (typeof window.external_link_live_config === 'undefined') return;
   var config = window.external_link_live_config;
   var pending = new Map();
+  var originalWindowOpen = window.open;
 
   function isExternal(href) {
-    if (!href) return false;
+    if (!href || typeof href !== 'string') return false;
+    var trimmed = href.trim();
+    if (/^(javascript:|mailto:|tel:|#|data:|blob:)/i.test(trimmed)) return false;
     try {
-      var url = new URL(href, window.location.href);
+      var url = new URL(trimmed, window.location.href);
       var sameHost = url.hostname === config.domain && (!config.port || String(url.port || (url.protocol === 'https:' ? 443 : 80)) === String(config.port));
-      return (url.protocol === 'http:' || url.protocol === 'https:') && !sameHost;
+      if (sameHost || (config.slug && url.pathname.indexOf('/' + config.slug) !== -1)) {
+        return false;
+      }
+      return (url.protocol === 'http:' || url.protocol === 'https:');
     } catch (error) {
       return false;
     }
-  }
-
-  function markScopedLinks(root) {
-    if (!config.selector || !root.querySelectorAll) return;
-    var containers = [];
-    try {
-      if (root.matches && root.matches(config.selector)) containers.push(root);
-      root.querySelectorAll(config.selector).forEach(function (container) { containers.push(container); });
-    } catch (error) {
-      return;
-    }
-    containers.forEach(function (container) {
-      container.querySelectorAll('a[href]').forEach(function (link) {
-        if (isExternal(link.href)) link.dataset.externalLink = '1';
-      });
-    });
   }
 
   function requestRedirectUrl(href) {
@@ -53,6 +43,35 @@
     return request;
   }
 
+  // 为节点内所有外部链接添加 data-external-link 标记（覆盖动态弹窗、AJAX加载等所有场景）
+  function markLinksInNode(root) {
+    if (!root || !root.querySelectorAll) return;
+    try {
+      if (root.matches && root.matches('a[href]')) {
+        if (isExternal(root.href)) root.dataset.externalLink = '1';
+      }
+      root.querySelectorAll('a[href]').forEach(function (link) {
+        if (isExternal(link.href)) link.dataset.externalLink = '1';
+      });
+    } catch (error) {}
+  }
+
+  // 针对配置了特定选择器的容器打标
+  function markScopedLinks(root) {
+    if (!config.selector || !root.querySelectorAll) return;
+    var containers = [];
+    try {
+      if (root.matches && root.matches(config.selector)) containers.push(root);
+      root.querySelectorAll(config.selector).forEach(function (container) { containers.push(container); });
+    } catch (error) {
+      return;
+    }
+    containers.forEach(function (container) {
+      markLinksInNode(container);
+    });
+  }
+
+  // 预转链逻辑（仅对配置了特定选择器的模块生效，避免全站预请求过多触发限流）
   function preconvertScopedLinks(root) {
     if (!config.selector || !root.querySelectorAll) return;
     var containers = [];
@@ -77,27 +96,62 @@
     });
   }
 
+  // 核心拦截处理：监听点击事件
   function handleNavigation(event) {
-    var link = event.target.closest && event.target.closest('a[data-external-link="1"]');
-    if (!link || event.altKey) return;
-    var originalHref = link.dataset.externalLinkOriginal || link.href;
-    if (!isExternal(originalHref) && !link.dataset.externalLinkPrefetched) return;
+    if (event.altKey) return;
     if (event.type === 'click' && event.button !== 0) return;
     if (event.type === 'auxclick' && event.button !== 1) return;
 
-    event.preventDefault();
-    // 摘除 target，避免浏览器默认导航（target="_blank"）与下方 window.open 各自
-    // 打开一个新窗口。via 等浏览器在 document 冒泡阶段对 preventDefault 拦截
-    // target 链接并不可靠，此处额外移除 target 作为兜底，保证只开一个窗口。
-    link.removeAttribute('target');
-    var openedWindow = window.open('about:blank', '_blank');
-    link.setAttribute('aria-busy', 'true');
+    var targetEl = event.target;
+    var link = targetEl && targetEl.closest ? targetEl.closest('a[href]') : null;
+    var externalUrl = null;
+    var isPrefetched = false;
 
-    var redirectRequest = link.dataset.externalLinkPrefetched
-      ? Promise.resolve(link.href)
-      : requestRedirectUrl(originalHref);
+    if (link) {
+      var rawHref = link.getAttribute('href') || '';
+      if (!/^(javascript:|#|mailto:|tel:|data:|blob:)/i.test(rawHref.trim())) {
+        var originalHref = link.dataset.externalLinkOriginal || link.href;
+        if (link.dataset.externalLinkPrefetched) {
+          externalUrl = link.href;
+          isPrefetched = true;
+        } else if (link.dataset.externalLink === '1' || isExternal(originalHref)) {
+          externalUrl = originalHref;
+        }
+      }
+    } else {
+      // 兼容非 <a> 标签带有 data-url / data-href / data-link 的自定义按钮/卡片（常见于商业弹窗）
+      var customEl = targetEl && targetEl.closest ? targetEl.closest('[data-url], [data-href], [data-link]') : null;
+      if (customEl) {
+        var customUrl = customEl.getAttribute('data-url') || customEl.getAttribute('data-href') || customEl.getAttribute('data-link');
+        if (isExternal(customUrl)) {
+          externalUrl = customUrl;
+          link = customEl;
+        }
+      }
+    }
+
+    if (!externalUrl) return;
+
+    event.preventDefault();
+    event.stopPropagation();
+
+    if (link && link.removeAttribute) {
+      // 摘除 target，避免浏览器默认导航与下方 window.open 各自打开一个窗口
+      link.removeAttribute('target');
+      link.setAttribute('aria-busy', 'true');
+    }
+
+    // 同步打开新标签页，绕过现代浏览器的弹窗拦截策略
+    var openedWindow = originalWindowOpen.call(window, 'about:blank', '_blank');
+
+    var redirectRequest = isPrefetched
+      ? Promise.resolve(externalUrl)
+      : requestRedirectUrl(externalUrl);
+
     redirectRequest.then(function (redirectUrl) {
-      link.removeAttribute('aria-busy');
+      if (link && link.removeAttribute) {
+        link.removeAttribute('aria-busy');
+      }
       if (openedWindow && !openedWindow.closed) {
         openedWindow.opener = null;
         openedWindow.location.replace(redirectUrl);
@@ -107,18 +161,37 @@
     });
   }
 
+  // 劫持原生 window.open，防御性拦截通过 JS 脚本/广告组件直接发起的外部跳转
+  window.open = function (url, target, features) {
+    if (url && typeof url === 'string' && isExternal(url)) {
+      var openedWindow = originalWindowOpen.call(window, 'about:blank', target || '_blank', features);
+      requestRedirectUrl(url).then(function (redirectUrl) {
+        if (openedWindow && !openedWindow.closed) {
+          openedWindow.opener = null;
+          openedWindow.location.replace(redirectUrl);
+        } else {
+          window.location.assign(redirectUrl);
+        }
+      });
+      return openedWindow;
+    }
+    return originalWindowOpen.apply(window, arguments);
+  };
+
   markScopedLinks(document);
   preconvertScopedLinks(document);
-  // 捕获阶段绑定：更早取消默认导航，防止 target="_blank" 链接在部分浏览器
-  // （如 via）中既触发默认新窗口、又被下方 window.open 再开一个窗口。
+
+  // 捕获阶段绑定：最优先捕获点击事件
   document.addEventListener('click', handleNavigation, true);
   document.addEventListener('auxclick', handleNavigation, true);
 
+  // 监听 DOM 树变动，自动为新增的弹窗、模态框、异步加载内容标记外链
   if ('MutationObserver' in window && document.body) {
     new MutationObserver(function (mutations) {
       mutations.forEach(function (mutation) {
         mutation.addedNodes.forEach(function (node) {
           if (node.nodeType === 1) {
+            markLinksInNode(node);
             markScopedLinks(node);
             preconvertScopedLinks(node);
           }

@@ -2,7 +2,7 @@
 /**
  * Plugin Name: 外链跳转
  * Description: 外链跳转是一个非常实用的WordPress插件，它可以对文章中的外链进行过滤，有效地防止追踪和提醒用户。
- * Version: 1.3.0
+ * Version: 1.3.1
  * Requires at least: 6.4
  * Requires PHP: 7.4
  * Author: 木木
@@ -42,7 +42,7 @@ function external_link_add_settings_link($actions) {
 // 插件统一版本
 function external_link_plugin_version()
 {
-    return "1.3.0";
+    return "1.3.1";
 }
 $version = external_link_plugin_version();
 
@@ -277,6 +277,7 @@ function external_link_enqueue_live_script() {
         'domain'   => wp_parse_url(home_url(), PHP_URL_HOST),
         'port'     => wp_parse_url(home_url(), PHP_URL_PORT),
         'selector' => $selector,
+        'slug'     => external_link_get_slug(),
     ));
 }
 add_action('wp_enqueue_scripts', 'external_link_enqueue_live_script', 15);
